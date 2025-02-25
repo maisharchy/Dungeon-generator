@@ -4,6 +4,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <stdint.h>
+#include <arpa/inet.h>
+#include <limits.h>
+#include <stdbool.h>
 
 #define WIDTH 80
 #define HEIGHT 21
@@ -17,11 +20,19 @@
 #define UP_STAIR '<'
 #define DOWN_STAIR '>'
 #define PLAYER '@'
+#define MONSTER 'M'
+
+
+
 
 typedef struct {
     int x, y, width, height;
 } Room;
+typedef struct {
+    int x, y;
+} Position;
 
+int distance_map[HEIGHT][WIDTH]; 
 char dungeon[HEIGHT][WIDTH];
 Room rooms[MAX_ROOMS];
 int room_count = 0;
@@ -83,6 +94,114 @@ void connect_rooms() {
     }
 }
 
+ 
+
+void dijkstra(Position player, bool tunneling) {
+    int visited[HEIGHT][WIDTH] = {0};
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            distance_map[i][j] = INT_MAX; 
+        }
+    }
+
+    distance_map[player.y][player.x] = 0; 
+
+    for (int iter = 0; iter < WIDTH * HEIGHT; iter++) {
+        int min_dist = INT_MAX, min_x = -1, min_y = -1;
+        for (int i = 0; i < HEIGHT; i++) {
+            for (int j = 0; j < WIDTH; j++) {
+                if (!visited[i][j] && distance_map[i][j] < min_dist) {
+                    min_dist = distance_map[i][j];
+                    min_x = j;
+                    min_y = i;
+                }
+            }
+        }
+
+        if (min_x == -1) break; 
+        
+        visited[min_y][min_x] = 1;
+
+        
+        int move_cost = (tunneling && dungeon[min_y][min_x] == ROCK) ? 3 : 1;
+        
+        
+        int dx[] = {0, 1, 0, -1, -1, -1, 1, 1};  
+        int dy[] = {-1, 0, 1, 0, -1, 1, -1, 1};
+
+        
+        for (int d = 0; d < 8; d++) {  
+    int nx = min_x + dx[d], ny = min_y + dy[d];
+
+    if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
+        if (dungeon[ny][nx] == ROCK && !tunneling) continue;
+
+        int new_cost = distance_map[min_y][min_x] + move_cost;
+        if (new_cost < distance_map[ny][nx]) {
+            distance_map[ny][nx] = new_cost;
+        }
+    }
+}
+
+    }
+}
+
+void print_distance_map(Position player) {
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            if (x == player.x && y == player.y) {
+                printf("@"); 
+            } else {
+                if (distance_map[y][x] == INT_MAX) {
+                    printf(" "); 
+                } else {
+                    printf("%d", distance_map[y][x] % 10);  
+                }
+            }
+        }
+        printf("\n");
+    }
+}
+
+
+void dijkstra_pathfinding(Position start) {
+    int dist[HEIGHT][WIDTH];
+
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            dist[i][j] = INT_MAX;
+        }
+    }
+
+    dist[start.y][start.x] = 0;
+
+    for (int iteration = 0; iteration < WIDTH * HEIGHT; iteration++) {
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                if (dungeon[y][x] != ROCK) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if ((dx == 0 || dy == 0 || abs(dx) == abs(dy)) &&  
+                                (x + dx >= 0 && x + dx < WIDTH && y + dy >= 0 && y + dy < HEIGHT)) {
+                                int new_dist = dist[y][x] + 1;  
+                                if (new_dist < dist[y + dy][x + dx]) {
+                                    dist[y + dy][x + dx] = new_dist;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    dungeon[start.y][start.x] = MONSTER; 
+}
+
+void place_monster() {
+    Position monster_start = {rooms[room_count-1].x + 1, rooms[room_count-1].y + 1};
+    dijkstra_pathfinding(monster_start);
+}
 void place_staircases() {
     int up_index = rand() % room_count;
     int down_index;
@@ -187,16 +306,42 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--load") == 0) load = 1;
     }
     
+    Position player_pos = {0, 0};
+    
     if (load) {
         load_dungeon();
+        printf("\nDungeon:\n");
+        print_dungeon();
+
+        printf("\nNon-Tunneling Distance Map:\n");
+        dijkstra(player_pos, false);
+        print_distance_map(player_pos);
+
+        printf("\nTunneling Distance Map:\n");
+        dijkstra(player_pos, true);
+        print_distance_map(player_pos);
+        
     } else {
         init_dungeon();
         place_rooms();
         connect_rooms();
         place_staircases();
         place_player();
+        place_monster();
+        player_pos = (Position){rooms[0].x + 1, rooms[0].y + 1};  
     }
+
+    printf("\nDungeon:\n");
     print_dungeon();
+
+    printf("\nNon-Tunneling Distance Map:\n");
+    dijkstra(player_pos, false);
+    print_distance_map(player_pos);
+
+    printf("\nTunneling Distance Map:\n");
+    dijkstra(player_pos, true);
+    print_distance_map(player_pos);
+
     if (save) save_dungeon();
     
     return 0;
