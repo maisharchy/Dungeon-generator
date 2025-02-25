@@ -37,10 +37,17 @@ char dungeon[HEIGHT][WIDTH];
 Room rooms[MAX_ROOMS];
 int room_count = 0;
 char save_path[256];
+int hardness[HEIGHT][WIDTH];
 
 void init_dungeon() {
-    memset(dungeon, ROCK, sizeof(dungeon));
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            dungeon[i][j] = ROCK;
+            hardness[i][j] = (rand() % 254) + 1;  // Random hardness (1-254) for rocks
+        }
+    }
 }
+
 
 int is_valid_room(int x, int y, int w, int h) {
     if (x + w >= WIDTH - 1 || y + h >= HEIGHT - 1) return 0;
@@ -65,6 +72,7 @@ void place_rooms() {
             for (int i = y; i < y + h; i++) {
                 for (int j = x; j < x + w; j++) {
                     dungeon[i][j] = ROOM;
+                    hardness[i][j] = 0;
                 }
             }
             rooms[room_count++] = (Room){x, y, w, h};
@@ -80,16 +88,19 @@ void connect_rooms() {
 
         
         while (x1 != x2) {
-            if (dungeon[y1][x1] == ROCK)  
+            if (dungeon[y1][x1] == ROCK){  
                 dungeon[y1][x1] = CORRIDOR;
+                hardness[y1][x1] = 0;
+            }
             x1 += (x2 > x1) ? 1 : -1;
         }
 
         
         while (y1 != y2) {
-            if (dungeon[y1][x1] == ROCK)  
+            if (dungeon[y1][x1] == ROCK){  
                 dungeon[y1][x1] = CORRIDOR;
-            y1 += (y2 > y1) ? 1 : -1;
+                hardness[y1][x1] = 0;
+            }y1 += (y2 > y1) ? 1 : -1;
         }
     }
 }
@@ -104,7 +115,7 @@ void dijkstra(Position player, bool tunneling) {
         }
     }
 
-    distance_map[player.y][player.x] = 0; 
+    distance_map[player.y][player.x] = 0;
 
     for (int iter = 0; iter < WIDTH * HEIGHT; iter++) {
         int min_dist = INT_MAX, min_x = -1, min_y = -1;
@@ -118,31 +129,26 @@ void dijkstra(Position player, bool tunneling) {
             }
         }
 
-        if (min_x == -1) break; 
-        
+        if (min_x == -1) break;
         visited[min_y][min_x] = 1;
 
-        
-        int move_cost = (tunneling && dungeon[min_y][min_x] == ROCK) ? 3 : 1;
-        
-        
         int dx[] = {0, 1, 0, -1, -1, -1, 1, 1};  
         int dy[] = {-1, 0, 1, 0, -1, 1, -1, 1};
 
-        
         for (int d = 0; d < 8; d++) {  
-    int nx = min_x + dx[d], ny = min_y + dy[d];
+            int nx = min_x + dx[d], ny = min_y + dy[d];
 
-    if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
-        if (dungeon[ny][nx] == ROCK && !tunneling) continue;
+            if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
+                if (!tunneling && dungeon[ny][nx] == ROCK) continue;
 
-        int new_cost = distance_map[min_y][min_x] + move_cost;
-        if (new_cost < distance_map[ny][nx]) {
-            distance_map[ny][nx] = new_cost;
+                int move_cost = (tunneling) ? (hardness[ny][nx] / 85) + 1 : 1;
+                int new_cost = distance_map[min_y][min_x] + move_cost;
+
+                if (new_cost < distance_map[ny][nx]) {
+                    distance_map[ny][nx] = new_cost;
+                }
+            }
         }
-    }
-}
-
     }
 }
 
@@ -296,6 +302,32 @@ void setup_save_path() {
     snprintf(save_path, sizeof(save_path), "%s/.rlg327/dungeon", home);
 }
 
+void print_hardness_map() {
+    printf("\nHardness Map (Hexadecimal):\n");
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            printf("%02X ", hardness[y][x]); 
+        }
+        printf("\n");
+    }
+}
+
+void print_cost_grid() {
+    printf("\nGrid Cost:\n");
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            if (dungeon[y][x] == PLAYER) {
+                printf(" @");
+            } else {
+                int cost = (dungeon[y][x] == ROOM || dungeon[y][x] == CORRIDOR) ? 1 : 3;
+                printf("%2d", cost);
+            }
+        }
+        printf("\n");
+    }
+}
+
+
 
 int main(int argc, char *argv[]) {
     srand(time(NULL));
@@ -313,6 +345,9 @@ int main(int argc, char *argv[]) {
         printf("\nDungeon:\n");
         print_dungeon();
 
+        printf("\nHardness Map:\n");
+        print_hardness_map();
+
         printf("\nNon-Tunneling Distance Map:\n");
         dijkstra(player_pos, false);
         print_distance_map(player_pos);
@@ -329,8 +364,9 @@ int main(int argc, char *argv[]) {
         place_player();
         place_monster();
         player_pos = (Position){rooms[0].x + 1, rooms[0].y + 1};  
-    }
 
+    }
+    printf("PC is at (y, x): %d, %d\n", player_pos.y, player_pos.x);
     printf("\nDungeon:\n");
     print_dungeon();
 
@@ -341,6 +377,11 @@ int main(int argc, char *argv[]) {
     printf("\nTunneling Distance Map:\n");
     dijkstra(player_pos, true);
     print_distance_map(player_pos);
+
+    printf("\nHardness Map:\n");
+        print_hardness_map();
+        print_cost_grid();
+        
 
     if (save) save_dungeon();
     
