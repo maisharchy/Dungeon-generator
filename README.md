@@ -1,6 +1,6 @@
 # Dungeon Generator
 
-This project is a simple dungeon generator for a roguelike game. It creates a dungeon with randomly placed rooms and corridors, adds stairs and monsters, and provides features to save and load dungeons, find shortest path to PC.
+This project is a simple dungeon generator for a roguelike game. It creates a dungeon with randomly placed rooms and corridors, adds stairs and monsters, and provides features to save and load dungeons,(removed this time for better quality) find shortest path to PC. Generates monsters randomly with randomized attributes, kills the PC.
 
 ## Features Implemented:
 
@@ -12,6 +12,7 @@ This project is a simple dungeon generator for a roguelike game. It creates a du
 - Prints the dungeon layout to standard output.
 - Saves and loads a dungeon to/from a binary file.
 - Dijkstra's pathfinding for tunnelling and non-tunnelling mosters
+- Move monster and place monster features implemented along with game loop logic.
 
  
 
@@ -47,13 +48,8 @@ Sets up the save file path in the user's home directory (`~/.rlg327/dungeon`).
 ### `print_dungeon()`
 Prints the dungeon layout to the console.
 
-### `print_hardness_map()`
-Prints the hardness map (randomly generated hardness values for each cell).
 
-### `print_cost_grid()`
-Prints a grid representing the terrain cost (based on dungeon cells).
-
-### `print_distance_cost_map(Position player)`
+### `print_distance_map(Position player)`
 Prints a distance cost map based on the player's position.
 
 ### `dijkstra(Position player, bool tunneling)`
@@ -63,7 +59,32 @@ Generates a distance map based on the Dijkstra algorithm. Supports tunneling (mo
 Generates a path for monsters to follow using Dijkstra’s algorithm.
 
 ### `place_monster()`
-Places a monster (`M`) at a random valid position using the Dijkstra pathfinding.[Needs farther improvement for 1.04 I still haven'ts started 1.04. Work in progress]
+Randomly places a specified number of monsters within valid rooms in the dungeon, assigning them random attributes and symbols. It updates the dungeon grid with the monster's position and details, ensuring placement in accessible areas.
+
+### `move_monster()`
+moves monsters based on their attributes, such as telepathic, smart, erratic, or basic movement towards the player. It updates their position on the dungeon grid and ensures the movement is valid.
+
+### `insert_event`  
+Inserts an event into the priority queue and increments the queue size.
+
+### `dequeue_event`  
+Dequeues and returns the highest priority event from the queue, adjusting the queue size.
+
+### `simulate_turn`  
+Simulates a monster's turn by moving it based on its attributes, then re-queues the monster's next movement event.
+
+### `check_player_death`  
+Checks if the player has been killed by any monsters at the player's current position.
+
+### `check_game_end`  
+Ends the game if the player is dead, printing a "Game Over" message.
+
+### `update_display`  
+Updates and prints the current dungeon state, including player position and any other relevant data.
+
+### `game_loop`  
+Main game loop that handles event processing, monster movements, and checks for game-ending conditions.
+
 
 ## Command-Line Arguments:
 
@@ -72,13 +93,16 @@ Places a monster (`M`) at a random valid position using the Dijkstra pathfinding
 - `--load --save` - Loads an existing dungeon and saves it again (for verification).
 - `load` - Loads a dungeon without making any changes (no save).
 
-## NEW 1.03 instructions and comments:
+## NEW 1.04 instructions and comments:
 
-## How to get the maps:
+## Command-Line Arguments:
+### `nummon` switch
 
-- simply use ./dun after the make command.
-[the load and save for 1.02 has not been updated for this 1.03 project. The professer said in class we don't have to.]
+The `--nummon <n>` argument allows you to specify how many monsters should be generated when the dungeon is created. For example, if you run:
+
+
+./dun --nummon 10
 
 ## New this time:
 
-I have implemented the distance map using dijkstra's algorithm, My code generates a dungeon, prints non-tunneling, tunneling distance map, hardness map in hexadecimal, and a grid-cost map. Last two maps I have added because it was in the test cases, but not in the instructions.
+I have implemented the random monster generation according to different attributes.They all have different randomized speed and kills the pc. The PC doesn't move as it was said in rubric it's okay for this time. 
