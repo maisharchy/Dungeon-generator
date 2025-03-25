@@ -7,7 +7,9 @@
 #include <arpa/inet.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <unistd.h>  // For usleep
+#include <unistd.h>  
+#include <ncurses.h>
+
 
 #define WIDTH 80
 #define HEIGHT 21
@@ -44,6 +46,7 @@ typedef struct {
     int x, y;
     int speed;
     int attributes;  // Bitmask for monster attributes
+    char symbol;
 } Monster;
 void print_dungeon();
 void print_cost_grid();
@@ -54,17 +57,27 @@ Room rooms[MAX_ROOMS];
 int room_count = 0;
 char save_path[256];
 int hardness[HEIGHT][WIDTH];
-Monster monsters[100];  // Array to store monsters
-int monster_count = 0;  // Number of monsters
-int num_monsters = 0;  // Default monster count
-
+Monster monsters[100];  
+int monster_count = 0;  
+int num_monsters = 0;  
+void handle_input();
+void update_npcs();
+void draw_dungeon();
+void rest_turn();
+void attempt_stairs_down();
+void attempt_stairs_up();
+void display_monster_list();
+void scroll_up();
+void scroll_down();
+void move_pc(int dx, int dy, Position *player_pos);
+void return_to_character_control();
 
 
 void init_dungeon() {
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             dungeon[i][j] = ROCK;
-            hardness[i][j] = (rand() % 254) + 1;  // Random hardness (1-254) for rocks
+            hardness[i][j] = (rand() % 254) + 1;  
         }
     }
 }
@@ -242,30 +255,24 @@ void place_monster(int num_monsters) {
 
 void move_monster(Monster *monster, Position player_pos) {
     
-    dungeon[monster->y][monster->x] = ROOM;  // Reset previous position to room type or empty space
+    dungeon[monster->y][monster->x] = ROOM;  
 
-    // Handle Telepathic Monsters
     if (monster->attributes & ATTRIBUTE_TELEPATHIC) {
-        // Telepathic monsters always know where the PC is
         if (monster->x < player_pos.x) monster->x++;
         else if (monster->x > player_pos.x) monster->x--;
 
         if (monster->y < player_pos.y) monster->y++;
         else if (monster->y > player_pos.y) monster->y--;
     }
-    // Handle Intelligent Monsters (Smart)
     else if (monster->attributes & ATTRIBUTE_SMART) {
-        // Used Dijkstra's pathfinding to find the shortest path to the player
         dijkstra(player_pos, (monster->attributes & ATTRIBUTE_TUNNEL) != 0);
 
-        // Move the monster to the next position towards the player 
         int min_dist = INT_MAX;
         int new_x = monster->x, new_y = monster->y;
 
-        int dx[] = {0, 1, 0, -1};  // 4 directions: up, right, down, left
+        int dx[] = {0, 1, 0, -1};  
         int dy[] = {-1, 0, 1, 0};
 
-        // Find the best direction to move
         for (int i = 0; i < 4; i++) {
             int nx = monster->x + dx[i];
             int ny = monster->y + dy[i];
@@ -280,10 +287,8 @@ void move_monster(Monster *monster, Position player_pos) {
         monster->x = new_x;
         monster->y = new_y;
     }
-    // Handle Erratic Monsters
     else if (monster->attributes & ATTRIBUTE_ERRATIC && rand() % 2 == 0) {
-        // Erratic monsters have a 50% chance of moving randomly
-        int dx[] = {0, 1, 0, -1};  // 4 directions
+        int dx[] = {0, 1, 0, -1};  
         int dy[] = {-1, 0, 1, 0};
         int random_direction = rand() % 4;
 
@@ -295,9 +300,8 @@ void move_monster(Monster *monster, Position player_pos) {
             monster->y = ny;
         }
     }
-    // Handle Non-Intelligent Monsters (Basic movement)
+
     else {
-        // Move towards the player
         if (monster->x < player_pos.x) monster->x++;
         else if (monster->x > player_pos.x) monster->x--;
 
@@ -306,25 +310,25 @@ void move_monster(Monster *monster, Position player_pos) {
     }
 
    
-    char monster_symbol = MONSTER;  // Default symbol
+    char monster_symbol = MONSTER;  
 
     
     if (monster->attributes & ATTRIBUTE_MAGIC) {
-        monster_symbol = 'M'; // Magic takes precedence
+        monster_symbol = 'M';
     } else if (monster->attributes & ATTRIBUTE_ERRATIC) {
-        monster_symbol = 'E'; // Erratic takes precedence
+        monster_symbol = 'E';
     } else if (monster->attributes & ATTRIBUTE_SMART) {
-        monster_symbol = 'S'; // Smart monsters
+        monster_symbol = 'S';
     } else if (monster->attributes & ATTRIBUTE_TELEPATHIC) {
-        monster_symbol = 'T'; // Telepathic monsters
+        monster_symbol = 'T';
     } else if (monster->attributes & ATTRIBUTE_TUNNEL) {
-        monster_symbol = 'U'; // Tunnel monsters
+        monster_symbol = 'U';
     }
 
     
     
     if (dungeon[monster->y][monster->x] == ROOM || dungeon[monster->y][monster->x] == CORRIDOR) {
-        dungeon[monster->y][monster->x] = monster_symbol;  // Using the monster's symbol
+        dungeon[monster->y][monster->x] = monster_symbol;
     } else {
         monster->x = monster->x;
         monster->y = monster->y;
@@ -345,7 +349,7 @@ void insert_event(Event *queue, int *queue_size, Event event) {
 
 Event dequeue_event(Event *queue, int *queue_size) {
     if (*queue_size == 0) {
-        return (Event){-1, NULL};  // No events
+        return (Event){-1, NULL};
     }
     Event event = queue[0];
     for (int i = 0; i < *queue_size - 1; i++) {
@@ -359,8 +363,7 @@ Event dequeue_event(Event *queue, int *queue_size) {
 void simulate_turn(Event *event_queue, int *queue_size, Position player_pos) {
     Event event = dequeue_event(event_queue, queue_size);
     if (event.monster != NULL) {
-        move_monster(event.monster, player_pos);  // Move the monster
-        // Adding the next move event back into the queue
+        move_monster(event.monster, player_pos);  
         Event next_event = {event.turn + 1000 / event.monster->speed, event.monster};
         insert_event(event_queue, queue_size, next_event);
     }
@@ -370,7 +373,7 @@ void simulate_turn(Event *event_queue, int *queue_size, Position player_pos) {
 bool check_player_death(Position player_pos) {
     for (int i = 0; i < monster_count; i++) {
         if (monsters[i].x == player_pos.x && monsters[i].y == player_pos.y) {
-            return true;  // Player is dead
+            return true; 
         }
     }
     return false;
@@ -380,7 +383,7 @@ bool check_player_death(Position player_pos) {
 void check_game_end(Position player_pos) {
     if (check_player_death(player_pos)) {
         printf("Game Over! The player has died.\n");
-        exit(0);  // Game ends
+        exit(0);  
     }
     
 }
@@ -390,10 +393,9 @@ void update_display(Position player_pos) {
 }
 
 void game_loop(Position player_pos) {
-    Event event_queue[1000];  // Priority queue for monster events
+    Event event_queue[1000];  
     int queue_size = 0;
 
-    // Adding monster move events to the queue
     for (int i = 0; i < monster_count; i++) {
         Event event = {0, &monsters[i]};
         insert_event(event_queue, &queue_size, event);
@@ -401,66 +403,17 @@ void game_loop(Position player_pos) {
 
     while (true) {
         update_display(player_pos);
-        usleep(250000);  
-
-        simulate_turn(event_queue, &queue_size, player_pos);  
-
-        check_game_end(player_pos);  
+        
+        handle_input(&player_pos);
+        check_player_death(player_pos);  
+        check_game_end(player_pos); 
+        
+        update_npcs(player_pos);    
+        draw_dungeon();
+        usleep(100000);  
     }
 }
 
-
-void print_distance_map(Position player) {
-    for (int y = 0; y < HEIGHT; y++) {
-        for (int x = 0; x < WIDTH; x++) {
-            if (x == player.x && y == player.y) {
-                printf("@"); 
-            } else {
-                if (distance_map[y][x] == INT_MAX) {
-                    printf(" "); 
-                } else {
-                    printf("%d", distance_map[y][x] % 10);  
-                }
-            }
-        }
-        printf("\n");
-    }
-}
-
-
-void dijkstra_pathfinding(Position start) {
-    int dist[HEIGHT][WIDTH];
-
-    for (int i = 0; i < HEIGHT; i++) {
-        for (int j = 0; j < WIDTH; j++) {
-            dist[i][j] = INT_MAX;
-        }
-    }
-
-    dist[start.y][start.x] = 0;
-
-    for (int iteration = 0; iteration < WIDTH * HEIGHT; iteration++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int x = 0; x < WIDTH; x++) {
-                if (dungeon[y][x] != ROCK) {
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            if ((dx == 0 || dy == 0 || abs(dx) == abs(dy)) &&  
-                                (x + dx >= 0 && x + dx < WIDTH && y + dy >= 0 && y + dy < HEIGHT)) {
-                                int new_dist = dist[y][x] + 1;  
-                                if (new_dist < dist[y + dy][x + dx]) {
-                                    dist[y + dy][x + dx] = new_dist;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    dungeon[start.y][start.x] = MONSTER; 
-}
 
 
 void place_staircases() {
@@ -476,54 +429,6 @@ void place_player() {
     dungeon[rooms[0].y + 1][rooms[0].x + 1] = PLAYER;
 }
 
-void save_dungeon() {
-    FILE *file = fopen(save_path, "wb");
-    if (!file) return;
-
-    fwrite("RLG327", 1, 6, file);
-    uint16_t version = htons(1);
-    fwrite(&version, sizeof(version), 1, file);
-
-    uint32_t rc = htonl(room_count);
-    fwrite(&rc, sizeof(rc), 1, file);
-
-    for (int i = 0; i < room_count; i++) {
-        uint8_t room_data[4] = {rooms[i].x, rooms[i].y, rooms[i].width, rooms[i].height};
-        fwrite(room_data, 1, 4, file);
-    }
-
-    fwrite(dungeon, sizeof(dungeon), 1, file);
-    fclose(file);
-}
-
-void load_dungeon() {
-    FILE *file = fopen(save_path, "rb");
-    if (!file) return;
-
-    char magic[6];
-    fread(magic, 1, 6, file);
-    if (strncmp(magic, "RLG327", 6) != 0) {
-        fclose(file);
-        return;
-    }
-
-    uint16_t version;
-    fread(&version, sizeof(version), 1, file);
-    version = ntohs(version);
-
-    uint32_t rc;
-    fread(&rc, sizeof(rc), 1, file);
-    room_count = ntohl(rc);
-
-    for (int i = 0; i < room_count; i++) {
-        uint8_t room_data[4];
-        fread(room_data, 1, 4, file);
-        rooms[i] = (Room){room_data[0], room_data[1], room_data[2], room_data[3]};
-    }
-
-    fread(dungeon, sizeof(dungeon), 1, file);
-    fclose(file);
-}
 
 void print_dungeon() {
     for (int y = 0; y < HEIGHT; y++) {
@@ -534,50 +439,213 @@ void print_dungeon() {
     }
 }
 
-void setup_save_path() {
-    char *home = getenv("HOME");
-    if (!home) {
-        fprintf(stderr, "Error: HOME environment variable not found.\n");
-        return;
-    }
-
-    
-    snprintf(save_path, sizeof(save_path), "%s/.rlg327", home);
-
-    
-    struct stat st = {0};
-    if (stat(save_path, &st) == -1) {
-        if (mkdir(save_path, 0755) == -1) {
-            perror("Error creating .rlg327 directory");
-            return;
-        }
-    }
-
-    
-    snprintf(save_path, sizeof(save_path), "%s/.rlg327/dungeon", home);
-}
-
-/*
-void handle_nummon(int nummon) {
-    // Ensure the requested number of monsters is within a reasonable range
-    if (nummon <= 0) {
-        printf("Please specify a positive number of monsters.\n");
-        return;
-    }
-
-    // Place the specified number of monsters
-    for (int i = 0; i < nummon; i++) {
-        place_monster(num_monsters);
-    }
-}
-*/
-
 
 void place_monsters(int num_monsters) {
     for (int i = 0; i < num_monsters; i++) {
         place_monster(num_monsters);  
     }
 }
+void init_ncurses() {
+    initscr();
+    cbreak();
+    noecho();
+    curs_set(0);
+    keypad(stdscr, TRUE);
+    timeout(-1);  
+}
+
+
+
+void handle_input(Position *player_pos) {
+    char input;
+    print_dungeon();
+
+    printf("Move your character (@) using the following keys:\n");
+    printf("  7, 8, 9 for diagonal movement (7=Up-Left, 8=Up, 9=Up-Right)\n");
+    printf("  1, 2, 3 for diagonal movement (1=Down-Left, 2=Down, 3=Down-Right)\n");
+    printf("  h for Left, k for Up, j for Down, l for Right\n");
+    printf("  > to go down stairs, < to go up stairs\n");
+    printf("  m to view monster list\n");
+    printf("  q to quit\n");
+    printf("Enter your choice: ");
+    scanf(" %c", &input);
+    switch((int)input) {
+        case '7': 
+        case 'y':
+            move_pc(-1, -1, player_pos);
+            break;
+        case '8':
+        case 'k':
+            move_pc(0, -1, player_pos);
+            break;
+        case '9': 
+        case 'u':
+            move_pc(1, -1, player_pos);
+            break;
+        case '6': 
+        case 'l':
+            move_pc(1, 0, player_pos);
+            break;
+        case '3': 
+        case 'n':
+            move_pc(1, 1, player_pos);
+            break;
+        case '2': 
+        case 'j':
+            move_pc(0, 1, player_pos);
+            break;
+        case '1': 
+        case 'b':
+            move_pc(-1, 1, player_pos);
+            break;
+        case '4': 
+        case 'h':
+            move_pc(-1, 0, player_pos);
+            break;
+        case '>': 
+            if (dungeon[player_pos->y][player_pos->x] == DOWN_STAIR) {
+                attempt_stairs_down();
+            }
+            break;
+        case '<': 
+            if (dungeon[player_pos->y][player_pos->x] == UP_STAIR) {
+                attempt_stairs_up();
+            }
+            break;
+        case '5': 
+        case ' ': 
+        case '.':
+            rest_turn();
+            break;
+        case 'm': 
+           display_monster_list(player_pos);
+           break;
+        case 27: 
+            handle_input(player_pos);
+            break;
+        case 'Q': 
+            endwin();
+            exit(0);
+            break;
+        default:
+            break;
+    }
+    
+   
+    update_npcs(*player_pos);
+    draw_dungeon();
+}
+
+
+void move_pc(int dx, int dy, Position *player_pos) {
+    int new_x = player_pos->x + dx;
+    int new_y = player_pos->y + dy;
+
+
+    if (new_x >= 0 && new_x < WIDTH && new_y >= 0 && new_y < HEIGHT) {
+        if (dungeon[new_y][new_x] != ROCK) {
+            dungeon[player_pos->y][player_pos->x] = ROOM;  
+            player_pos->x = new_x;
+            player_pos->y = new_y;
+            dungeon[player_pos->y][player_pos->x] = PLAYER;  
+        }
+    }
+}
+
+
+void rest_turn() {
+    mvprintw(0, 0, "You rest for a turn.");
+    refresh();
+}
+
+void attempt_stairs_down() {
+    mvprintw(0, 0, "You attempt to go down the stairs.");
+    refresh();
+}
+
+void attempt_stairs_up() {
+    mvprintw(0, 0, "You attempt to go up the stairs.");
+    refresh();
+}
+
+#define MONSTER_LIST_SIZE 10  
+
+int scroll_index = 0;  
+
+void display_monster_list(Position *player_pos) {
+    int ch;
+    clear();
+    keypad(stdscr, TRUE);  // Ensure arrow keys work
+    curs_set(0);  // Hide cursor
+
+    while (1) {
+        clear();
+        mvprintw(0, 0, "Monster List:");
+        mvprintw(1, 0, "Total Monsters: %d", monster_count);
+
+        if (monster_count == 0) {
+            mvprintw(2, 0, "No monsters in the dungeon.");
+        } else {
+            int end_index = scroll_index + MONSTER_LIST_SIZE;
+            if (end_index > monster_count) {
+                end_index = monster_count;
+            }
+
+            for (int i = scroll_index; i < end_index; i++) {
+                mvprintw(i - scroll_index + 3, 0, 
+                         "Monster %d at (%d, %d), Speed: %d, Symbol: %c", 
+                         i + 1, monsters[i].x, monsters[i].y, monsters[i].speed, monsters[i].symbol);
+            }
+        }
+
+        mvprintw(MONSTER_LIST_SIZE + 5, 0, "Use UP/DOWN to scroll, 'a' to return.");
+        refresh();
+
+        ch = getch();
+
+        switch (ch) {
+            case 'a':  // Exit the monster list
+                clear();
+                draw_dungeon();
+                return;
+            case KEY_UP:
+                if (scroll_index > 0) scroll_index--;
+                break;
+            case KEY_DOWN:
+                if (scroll_index + MONSTER_LIST_SIZE < monster_count) scroll_index++;
+                break;
+        }
+    }
+}
+
+void scroll_up(Position *player_pos) {
+    if (scroll_index > 0) {
+        scroll_index--;  
+        display_monster_list(player_pos);  
+    }
+}
+
+void scroll_down(Position *player_pos) {
+    if (scroll_index + MONSTER_LIST_SIZE < monster_count) {
+        scroll_index++; 
+        display_monster_list(player_pos);
+    }
+}
+void update_npcs(Position player_pos) {
+    for (int i = 0; i < monster_count; i++) {
+        move_monster(&monsters[i], player_pos);
+    }
+}
+void draw_dungeon() {
+    clear();
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            mvaddch(i, j, dungeon[i][j]);  
+        }
+    }
+    refresh();
+}
+
 
 int main(int argc, char *argv[]) {
     srand(time(NULL));
@@ -592,13 +660,16 @@ int main(int argc, char *argv[]) {
         }
         
     }
-    
-    //place_monsters(num_monsters);
+   
     init_dungeon();
     place_rooms();
-    place_stairs();
     connect_rooms();
+    place_stairs();
     place_monster(num_monsters);
+    print_dungeon(); 
+    draw_dungeon();  
+
+
     
     Position player_pos = {rooms[0].x + 1, rooms[0].y + 1};
     place_player();
