@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <unistd.h>  
 #include <ncurses.h>
+#include <termios.h>
+#include <unistd.h>
 
 
 #define WIDTH 80
@@ -244,8 +246,7 @@ void place_monster(int num_monsters) {
 
     if (dungeon[new_monster.y][new_monster.x] == ROOM || dungeon[new_monster.y][new_monster.x] == CORRIDOR) {
         dungeon[new_monster.y][new_monster.x] = monster_symbol;
-        printf("Monster placed at (%d, %d) with speed %d and attributes 0x%X, symbol: %c\n",
-               new_monster.x, new_monster.y, new_monster.speed, new_monster.attributes, monster_symbol);
+        
     } else {
     }
     }
@@ -455,10 +456,30 @@ void init_ncurses() {
 }
 
 
+void set_input_mode() {
+    struct termios new_termios;
+
+    tcgetattr(STDIN_FILENO, &new_termios);
+
+    new_termios.c_lflag &= ~(ICANON | ECHO);
+    new_termios.c_cc[VMIN] = 1; 
+    new_termios.c_cc[VTIME] = 0; 
+
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &new_termios);
+}
+
+void reset_input_mode() {
+    struct termios new_termios;
+    tcgetattr(STDIN_FILENO, &new_termios);
+    new_termios.c_lflag |= (ICANON | ECHO);
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &new_termios);
+}
 
 void handle_input(Position *player_pos) {
     char input;
-    print_dungeon();
+    set_input_mode();
 
     printf("Move your character (@) using the following keys:\n");
     printf("  7, 8, 9 for diagonal movement (7=Up-Left, 8=Up, 9=Up-Right)\n");
@@ -468,8 +489,10 @@ void handle_input(Position *player_pos) {
     printf("  m to view monster list\n");
     printf("  q to quit\n");
     printf("Enter your choice: ");
-    scanf(" %c", &input);
-    switch((int)input) {
+    
+    input = getchar();  
+    
+    switch(input) {
         case '7': 
         case 'y':
             move_pc(-1, -1, player_pos);
@@ -504,12 +527,12 @@ void handle_input(Position *player_pos) {
             break;
         case '>': 
             if (dungeon[player_pos->y][player_pos->x] == DOWN_STAIR) {
-                attempt_stairs_down();
+                attempt_stairs_down(player_pos);
             }
             break;
         case '<': 
             if (dungeon[player_pos->y][player_pos->x] == UP_STAIR) {
-                attempt_stairs_up();
+                attempt_stairs_up(player_pos);
             }
             break;
         case '5': 
@@ -520,9 +543,6 @@ void handle_input(Position *player_pos) {
         case 'm': 
            display_monster_list(player_pos);
            break;
-        case 27: 
-            handle_input(player_pos);
-            break;
         case 'Q': 
             endwin();
             exit(0);
@@ -530,12 +550,12 @@ void handle_input(Position *player_pos) {
         default:
             break;
     }
-    
-   
+
+    reset_input_mode();
+
     update_npcs(*player_pos);
     draw_dungeon();
 }
-
 
 void move_pc(int dx, int dy, Position *player_pos) {
     int new_x = player_pos->x + dx;
@@ -558,15 +578,45 @@ void rest_turn() {
     refresh();
 }
 
-void attempt_stairs_down() {
+void attempt_stairs_down(Position *player_pos) {
     mvprintw(0, 0, "You attempt to go down the stairs.");
     refresh();
+
+    if (dungeon[player_pos->y][player_pos->x] == DOWN_STAIR) {
+        init_dungeon(); 
+        place_rooms();
+        connect_rooms();
+        place_stairs();
+        place_monster(num_monsters);
+        print_dungeon();
+        draw_dungeon();
+
+        player_pos->x = rooms[0].x + 1;
+        player_pos->y = rooms[0].y + 1;
+        place_player();
+        game_loop(*player_pos);  
+    }
 }
 
-void attempt_stairs_up() {
+void attempt_stairs_up(Position *player_pos) {
     mvprintw(0, 0, "You attempt to go up the stairs.");
     refresh();
+    if (dungeon[player_pos->y][player_pos->x] == UP_STAIR) {
+        init_dungeon();
+        place_rooms();
+        connect_rooms();
+        place_stairs();
+        place_monster(num_monsters);
+        print_dungeon();
+        draw_dungeon();
+
+        player_pos->x = rooms[0].x + 1;
+        player_pos->y = rooms[0].y + 1;
+        place_player();
+        game_loop(*player_pos);  
+    }
 }
+
 
 #define MONSTER_LIST_SIZE 10  
 
@@ -574,17 +624,15 @@ int scroll_index = 0;
 
 void display_monster_list(Position *player_pos) {
     int ch;
-    clear();
-    keypad(stdscr, TRUE);  // Ensure arrow keys work
-    curs_set(0);  // Hide cursor
-
+    
     while (1) {
-        clear();
-        mvprintw(0, 0, "Monster List:");
-        mvprintw(1, 0, "Total Monsters: %d", monster_count);
+        system("clear");  
+
+        printf("Monster List:\n");
+        printf("Total Monsters: %d\n", monster_count);
 
         if (monster_count == 0) {
-            mvprintw(2, 0, "No monsters in the dungeon.");
+            printf("No monsters in the dungeon.\n");
         } else {
             int end_index = scroll_index + MONSTER_LIST_SIZE;
             if (end_index > monster_count) {
@@ -592,21 +640,20 @@ void display_monster_list(Position *player_pos) {
             }
 
             for (int i = scroll_index; i < end_index; i++) {
-                mvprintw(i - scroll_index + 3, 0, 
-                         "Monster %d at (%d, %d), Speed: %d, Symbol: %c", 
-                         i + 1, monsters[i].x, monsters[i].y, monsters[i].speed, monsters[i].symbol);
+                printf("Monster %d at (%d, %d), Speed: %d, Symbol: %c\n", 
+                       i + 1, monsters[i].x, monsters[i].y, monsters[i].speed, monsters[i].symbol);
             }
         }
 
-        mvprintw(MONSTER_LIST_SIZE + 5, 0, "Use UP/DOWN to scroll, 'a' to return.");
-        refresh();
-
-        ch = getch();
-
+        printf("\nUse up and down arrow to scroll up/down, 'a' to return to the game.\n");
+        
+        ch = getchar(); 
+        
         switch (ch) {
-            case 'a':  // Exit the monster list
+            case 'a':  
                 clear();
                 draw_dungeon();
+                dungeon[player_pos->y][player_pos->x] = PLAYER;
                 return;
             case KEY_UP:
                 if (scroll_index > 0) scroll_index--;
@@ -617,6 +664,7 @@ void display_monster_list(Position *player_pos) {
         }
     }
 }
+
 
 void scroll_up(Position *player_pos) {
     if (scroll_index > 0) {
@@ -660,13 +708,13 @@ int main(int argc, char *argv[]) {
         }
         
     }
-   
+    
     init_dungeon();
     place_rooms();
     connect_rooms();
     place_stairs();
     place_monster(num_monsters);
-    print_dungeon(); 
+    //print_dungeon(); 
     draw_dungeon();  
 
 
