@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.embeddedhtml": "html",
+        "ncurses.h": "c",
+        "stat.h": "c"
+    }
+}
