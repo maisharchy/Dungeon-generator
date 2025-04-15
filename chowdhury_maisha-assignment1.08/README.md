@@ -1,0 +1,2 @@
+### `1.08 work`
+I have used the instructor's code this time. My monsters are being generated from txt file to dungeon.I can get the color to the monsters according to the file.I am unable to generate the objects to my dungeon from file. I have this infinite loop when it tries to read from the file. I will work hard next time I am sorry.
