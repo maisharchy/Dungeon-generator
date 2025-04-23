@@ -1,0 +1,4 @@
+### `assignment 1.09`
+I have used the instructors code. For some reason when I first ran the code without adding anything everytime I use the make command and run the program it freezes. I have been unable to fix this issue even after I wrote the changes for this assignment. Als another bug that I have encountered from the instructors code is every 30-33 key press or so the game freezes. I have to terminate the current process to start the program again. THis issue was from before, from the instructors code only. I don't know where the bug is, I tried but couldn't figure out.
+# new
+Item equipment implemented. PC can wear item, look at monsters, see item descriptions etc. functionalities for 1.09 implemented. for i and e please press thrice,and for x press twice i don't know why it is behaving that way but third press should show the inventory and equipment and expunge. 
