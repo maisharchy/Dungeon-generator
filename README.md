@@ -103,6 +103,3 @@ The `--nummon <n>` argument allows you to specify how many monsters should be ge
 
 ./dun --nummon 10
 
-## New this time:
-
-I have implemented the random monster generation according to different attributes.They all have different randomized speed and kills the pc. The PC doesn't move as it was said in rubric it's okay for this time. 
